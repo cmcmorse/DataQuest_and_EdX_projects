@@ -2,8 +2,6 @@ setwd("~/Desktop/School/R stuff/r_sql")
 library(RSQLite)
 library(DBI)
 
-conn <- dbConnect(SQLite(), 'chinook.db')
-
 run_query <- function(q) {
   conn <- dbConnect(SQLite(), 'chinook.db')
   result <- dbGetQuery(conn, q)
@@ -56,7 +54,6 @@ top_10_g
 g_opts <- c('Hip-Hop','Alternative & Punk','Pop','Blues')
 g_opts[g_opts %in% top_10_g$name]
 # The three genres to choose should be: Punk, Pop, and Blues.
-dbDisconnect(conn)
 
 library(tidyverse)
 library(ggplot2)

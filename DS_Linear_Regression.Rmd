@@ -1,0 +1,696 @@
+---
+title: "Linear Regression"
+output: html_notebook
+---
+Case study: Moneyball
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(Lahman)
+library(dslabs)
+ds_theme_set()
+```
+
+Plot relationship between home runs and runs per game (wins):
+```{r}
+Teams %>%
+  filter(yearID %in% 1961:2001) %>%
+  mutate(HR_per_game = HR / G, 
+         R_per_game = R / G) %>%
+  ggplot(aes(HR_per_game, R_per_game)) + 
+  geom_point(alpha = 0.5)
+```
+
+Plot relationship between stolen bases and runs per game (wins):
+```{r}
+Teams %>%
+  filter(yearID %in% 1961:2001) %>%
+  mutate(SB_per_game = SB / G,
+         R_per_game = R / G) %>%
+  ggplot(aes(SB_per_game, R_per_game)) + 
+  geom_point(alpha = 0.5)
+```
+
+Plot relationship between base on balls and runs:
+```{r}
+Teams %>%
+  filter(yearID %in% 1961:2001) %>%
+  mutate(BB_per_game = BB / G,
+         R_per_game = R / G) %>%
+  ggplot(aes(BB_per_game, R_per_game)) +
+  geom_point(alpha = 0.5)
+```
+
+Plot relationship between at-bats per game and runs per game
+```{r}
+Teams %>%
+  filter(yearID %in% 1961:2001) %>%
+  mutate(AB_per_game = AB / G,
+         R_per_game = R / G) %>%
+  ggplot(aes(AB_per_game, R_per_game)) + 
+  geom_point(alpha = 0.5)
+```
+
+Plot relationship between win rate and fielding errors
+```{r}
+Teams %>%
+  filter(yearID %in% 1961:2001) %>%
+  mutate(win_rate = W / G,
+         fielding_errors = E / G) %>%
+  ggplot(aes(win_rate, fielding_errors)) + 
+  geom_point(alpha = 0.5)
+```
+
+Plot triples per game vs doubles per game
+```{r}
+Teams %>%
+  filter(yearID %in% 1961:2001) %>%
+  mutate(triples = X3B / G,
+         doubles = X2B / G) %>%
+  ggplot(aes(triples, doubles)) + 
+  geom_point(alpha = 0.5)
+```
+
+
+```{r}
+Teams %>%
+  filter(yearID %in% 1961:2001) %>%
+  mutate(runs_per_game = R/G,
+         AB_per_game = AB/G) %>%
+  summarize(r = cor(runs_per_game, AB_per_game)) %>%
+  pull(r)
+```
+
+
+```{r}
+Teams %>%
+  filter(yearID %in% 1961:2001) %>%
+  mutate(wins_per_game = W/G,
+         errors_per_game = E/G) %>%
+  summarize(r = cor(wins_per_game, errors_per_game)) %>%
+  pull(r)
+```
+
+```{r}
+Teams %>%
+  filter(yearID %in% 1961:2001) %>%
+  mutate(doubles = X2B/G,
+         triples = X3B/G) %>%
+  summarize(r = cor(doubles, triples)) %>%
+  pull(r)
+```
+
+### Galton Genetics Assessment
+Analyze mother and daughter heights from GaltonFamilies
+```{r}
+set.seed(1989, sample.kind = 'Rounding')
+library(HistData)
+```
+```{r}
+data("GaltonFamilies")
+```
+```{r}
+female_heights <- GaltonFamilies %>%
+  filter(gender == 'female') %>%
+  group_by(family) %>%
+  sample_n(1) %>%
+  ungroup() %>%
+  select(mother, childHeight) %>%
+  rename(daughter = childHeight)
+
+head(female_heights)
+```
+
+Calculate the mean and standard deviation of mothers' and daughters' heights.
+Calculate the correlation coefficient between mother and daughter heights.
+```{r}
+mom_m <- mean(female_heights$mother)
+mom_sd <- sd(female_heights$mother)
+dau_m <- mean(female_heights$daughter)
+dau_sd <- sd(female_heights$daughter)
+rho <- cor(female_heights$mother, female_heights$daughter)
+
+mom_m
+mom_sd
+dau_m
+dau_sd
+rho
+```
+
+```{r}
+summary(female_heights)
+```
+
+```{r}
+slope <- rho * dau_sd / mom_sd
+slope
+```
+
+```{r}
+intercept <- dau_m - slope * mom_m
+intercept
+```
+
+```{r}
+variance <- rho^2*100
+variance
+```
+
+```{r}
+intercept + slope * 60
+```
+
+## Linear Models
+```{r}
+galton_heights <- GaltonFamilies %>%
+  filter(gender == 'male') %>%
+  group_by(family) %>%
+  sample_n(1) %>%
+  ungroup() %>%
+  select(father, childHeight) %>%
+  rename(son = childHeight)
+```
+
+```{r}
+rss <- function(beta0, beta1, data){
+  resid <- galton_heights$son - (beta0 + beta1 * galton_heights$father)
+  return(sum(resid^2))
+}
+```
+
+
+```{r}
+B <- 1000
+N <- 50
+
+lse <- replicate(B, {
+  sample_n(galton_heights, N, replace = TRUE) %>%
+    mutate(father = father - mean(father)) %>%
+    lm(son ~ father, data = .)
+})
+
+# error with given function using %>% .$coef
+```
+```{r}
+galton_heights %>%
+  ggplot(aes(father, son)) + 
+  geom_point() + 
+  geom_smooth(mthod = 'lm')
+```
+
+Predict 'y' directly:
+```{r}
+fit <- galton_heights %>%
+  lm(son ~ father, data = .)
+
+Y_hat <- predict(fit, se.fit = TRUE)
+names(Y_hat)
+```
+
+Plot best fit line:
+```{r}
+galton_heights %>%
+  mutate(Y_hat = predict(lm(son ~ father, data = .))) %>%
+  ggplot(aes(father, Y_hat)) + 
+  geom_line()
+```
+
+Plot RSS with B0 fixed at 25:
+```{r}
+beta1 <- seq(0, 1, len = nrow(galton_heights))
+results <- data.frame(beta1 = beta1,
+                      rss = sapply(beta1, rss, beta0 = 36))
+
+results %>% ggplot(aes(beta1, rss)) + 
+  geom_line() + 
+  geom_line(aes(beta1, rss), col = 2)
+```
+
+```{r}
+Teams <- Teams %>%
+  filter(yearID %in% 1961:2001)
+
+q3 <- Teams %>%
+  mutate(R_g = R/G,
+         BB_g = BB/G,
+         HR_g = HR/G) %>%
+  lm(R_g ~ BB_g + HR_g, data = .)
+summary(q3)
+```
+
+```{r}
+set.seed(1989, sample.kind = 'Rounding')
+options(digits = 3)
+```
+```{r}
+female_heights <- GaltonFamilies %>%
+  filter(gender == 'female') %>%
+  group_by(family) %>%
+  sample_n(1) %>%
+  ungroup() %>%
+  select(mother, childHeight) %>%
+  rename(daughter = childHeight)
+```
+
+Fit a linear regression model predicting the mothers' heights using daughters' heights.
+```{r}
+q7 <- lm(mother ~ daughter, data = female_heights)
+summary(q7)
+```
+
+```{r}
+predict(q7, female_heights[1,'daughter'])
+```
+```{r}
+female_heights[1,'mother']
+```
+
+Want to assess the stability of BB and singles metrics.
+Want to generate two tables: one for 2002 and another for average of 1999-2001 seasons. Want to define per plate appearance statistics, keeping only players with more than 100 plate appearances.
+
+Create 2002 table: 
+```{r}
+bat_02 <- Batting %>%
+  filter(yearID == 2002) %>%
+  mutate(pa = AB + BB,
+         singles = (H - X2B - X3B - HR) / pa,
+         bb = BB / pa) %>%
+  filter(pa >= 100) %>%
+  select(playerID, singles, bb)
+```
+
+1999-2001:
+```{r}
+bat_99_01 <- Batting %>%
+  filter(yearID %in% 1999:2001) %>%
+  mutate(pa = AB + BB,
+         singles = (H - X2B - X3B - HR) / pa,
+         bb = BB / pa) %>%
+  filter(pa >= 100) %>%
+  select(playerID, yearID, singles, bb)
+
+sum_99_01 <- bat_99_01 %>%
+  group_by(playerID) %>%
+  summarise(mean_singles = mean(singles),
+            mean_bb = mean(bb),
+            .groups = 'drop')
+
+sum(sum_99_01$mean_bb > 0.2)
+```
+Use inner_join() to combine bat_02 with the rate averages.
+```{r}
+bat <- inner_join(bat_02, sum_99_01, by = 'playerID')
+
+head(bat)
+```
+```{r}
+cor(bat$bb, bat$mean_bb)
+```
+```{r}
+bat %>% ggplot(aes(mean_singles, singles)) + 
+  geom_point()
+```
+
+```{r}
+bat %>% ggplot(aes(mean_bb, bb)) + 
+  geom_point()
+```
+
+Fit a linear model to predict 2002 singles given 1999-2001 mean_singles:
+```{r}
+q12 <- lm(singles ~ mean_singles, data = bat)
+summary(q12)
+```
+```{r}
+q12b <- lm(bb ~ mean_bb, data = bat)
+summary(q12b)
+```
+
+## tibbles, do, and broom
+```{r}
+set.seed(1, sample.kind = 'Rounding')
+galton <- GaltonFamilies %>%
+  group_by(family, gender) %>%
+  sample_n(1) %>%
+  ungroup() %>%
+  gather(parent, parentHeight, father:mother) %>%
+  mutate(child = ifelse(gender == 'female',
+                        'daughter',
+                        'son')) %>%
+  unite(pair, c('parent', 'child'))
+
+galton
+```
+
+Group by 'pair' and summarize the number of observations in each group.
+```{r}
+galton %>%
+  group_by(pair) %>%
+  summarise(n = n(), .groups = 'drop')
+```
+```{r}
+galton %>%
+  group_by(pair) %>%
+  summarise(cc = cor(childHeight, parentHeight), .groups='drop') %>%
+  arrange(desc(cc))
+```
+
+
+```{r}
+library(broom)
+```
+
+```{r}
+galton %>%
+  group_by(pair) %>%
+  do(tidy(lm(childHeight ~ parentHeight, data = .), conf.int = TRUE))
+```
+
+## Building a baseball team
+Regression with BB, singles, doubles, triples, and HR
+```{r}
+fit <- Teams %>%
+  filter(yearID %in% 1961:2001) %>%
+  mutate(BB = BB / G,
+         singles = (H - X2B - X3B - HR) / G,
+         doubles = X2B / G,
+         triples = X3B / G,
+         HR = HR / G,
+         R = R / G) %>%
+  lm(R ~ BB + singles + doubles + triples + HR, data = .)
+
+coefs <- tidy(fit, conf.int = TRUE)
+coefs
+```
+```{r}
+Team_A <- 2*0.371 + 4*0.519 + 0.771 + 1.443
+Team_B <- 0.371 + 6*0.519 + 2*0.771 + 1.24
+
+Team_A >= Team_B
+```
+Fit a multivariate linear regression model to obtain the effects of BB and HR on Runs in 1971.
+Use the tidy() function in the broom package to obtain the results in a dataframe.
+```{r}
+Teams %>%
+  filter(yearID == 1971) %>%
+  lm(R ~ BB + HR, data = .) %>%
+  tidy(conf.int = TRUE)
+```
+
+Repeat above to find effects for every year from 1961 - 2018
+```{r}
+Teams %>%
+  filter(yearID %in% 1961:2018) %>%
+  group_by(yearID) %>%
+  do(tidy(lm(R ~ BB + HR, data = .), conf.int = TRUE))
+```
+Make a scatter plot for effect of BB on runs over time with trend line
+
+```{r messaage = FALSE}
+library(ggpmisc)
+```
+
+```{r}
+Teams %>%
+  filter(yearID %in% 1961:2018) %>%
+  group_by(yearID) %>%
+  do(tidy(lm(R ~ BB + HR, data = .), conf.int = TRUE)) %>%
+  filter(term == 'BB') %>%
+  ggplot(aes(x = yearID, y = estimate)) + 
+  geom_point() + 
+  geom_smooth(method = 'lm', formula = y~x) + 
+  stat_poly_eq(formula = y ~ x,
+               aes(label = paste(..eq.label.., sep = '~~~')),
+               parse = TRUE)
+```
+Fit a linear model on the results from above to determine the effect of year on impact of BB
+```{r}
+data("Teams")
+q11 <- Teams %>%
+  filter(yearID %in% 1961:2018) %>%
+  group_by(yearID) %>%
+  do(tidy(lm(R ~ BB + HR, data = .), conf.int = TRUE)) %>%
+  filter(term == 'BB')
+
+tidy(summary(lm(estimate ~ yearID, data = q11)))
+```
+
+
+Average number of team plate appearances per game
+```{r}
+pa_per_game <- Batting %>%
+  filter(yearID == 2002) %>%
+  group_by(teamID) %>%
+  summarise(pa_per_game = sum(AB + BB) / max(G), .groups = 'drop') %>%
+  pull(pa_per_game) %>%
+  mean
+
+pa_per_game
+```
+
+Per-plate rates for players available in 2002 using prior data
+```{r}
+players <- Batting %>%
+  filter(yearID %in% 1999:2001) %>%
+  group_by(playerID) %>%
+  mutate(PA = BB + AB) %>%
+  summarise(G = sum(PA) / pa_per_game,
+            BB = sum(BB) / G,
+            singles = sum(H - X2B - X3B - HR) / G,
+            doubles = sum(X2B) / G,
+            triples = sum(X3B) / G,
+            HR = sum(HR) / G,
+            AVG = sum(H) / sum(AB),
+            PA = sum(PA),
+            .groups = 'drop') %>%
+  filter(PA >= 300) %>%
+  select(-G) %>%
+  mutate(R_hat = predict(fit, newdata = .))
+
+head(players)
+```
+
+Plot player-specific predicted runs
+```{r}
+qplot(R_hat, data = players,
+      geom = 'histogram',
+      binwidth = 0.5,
+      fill = I("lightblue"))
+```
+
+Add 2002 salaries to each player
+```{r}
+players <- Salaries %>%
+  filter(yearID == 2002) %>%
+  select(playerID, salary) %>%
+  right_join(players, by = 'playerID')
+
+head(players)
+```
+
+Add defensive position
+```{r}
+position_names <- c('G_p','G_c','G_1b',
+                    'G_2b','G_3b','G_ss',
+                    'G_lf','G_cf','G_rf')
+
+temp_tab <- Appearances %>%
+  filter(yearID == 2002) %>%
+  group_by(playerID) %>%
+  summarise_at(position_names, sum) %>%
+  ungroup()
+
+pos <- temp_tab %>%
+  select(position_names) %>%
+  apply(., 1, which.max)  # get the position the player played most often
+
+players <- data_frame(playerID = temp_tab$playerID,
+                      POS = position_names[pos]) %>%
+  mutate(POS = str_to_upper(str_remove(POS, 'G_'))) %>%
+  filter(POS != 'P') %>%
+  right_join(players, by = 'playerID') %>%
+  filter(!is.na(POS) & !is.na(salary))
+
+head(players)
+```
+
+Top 10 players:
+```{r}
+players <- Master %>%
+  select(playerID, nameFirst, nameLast, debut) %>%
+  mutate(debut = as.Date(debut)) %>%
+  right_join(players, by = 'playerID') %>%
+  select(nameFirst, nameLast, POS, debut, salary, R_hat) %>%
+  arrange(desc(R_hat)) %>%
+  top_n(10)
+
+players
+```
+
+Remake plot without rookie players
+```{r message = FALSE}
+library(lubridate)
+```
+```{r}
+players %>% 
+  filter(year(debut) < 1998) %>%
+  ggplot(aes(salary, R_hat, color = POS)) + 
+  geom_point() + 
+  scale_x_log10()
+```
+Only showing data from top 10
+
+
+## Assessment
+```{r}
+data("Teams")
+Teams_small <- Teams %>%
+  filter(yearID %in% 1961:2001) %>%
+  mutate(avg_attendance = attendance/G)
+```
+
+```{r}
+Teams_small %>%
+  mutate(R_g = R / G,
+         HR_g = HR / G) %>%
+  do(tidy(lm(avg_attendance ~ HR_g, data = .)))
+```
+
+Use number of wins to predict avg_attendance; do not normalize for number of games.
+```{r}
+Teams_small %>%
+  do(tidy(lm(avg_attendance ~ yearID, data = .)))
+```
+```{r}
+Teams_small <- Teams_small %>%
+  mutate(R_g = R / G,
+         HR_g = HR / G)
+
+cor(Teams_small$HR_g, Teams_small$W)
+```
+#### Q3
+Stratify Teams_small by wins: divide number of wins by 10 and then round to the nearest integer. Keep only strata 5 - 10, which have 20 or more data points.
+```{r}
+Teams_small %>%
+  mutate(r_r = round(W/10)) %>%
+  filter(r_r %in% 5:10) %>%
+  ggplot(aes(HR_g, avg_attendance)) + 
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = 'lm', formula = y~x) + 
+  stat_poly_eq(formula = y ~ x,
+               aes(label = paste(..eq.label.., sep = '~~~')),
+               parse = TRUE) + 
+  facet_wrap(~r_r)
+```
+#### Q4
+Fit a multivariate regression determining the effects of runs per game, home runs per game, wins, and year on average attendance. Use original Teams_small W col (not strata)
+```{r}
+q4 <- Teams_small %>%
+  do(tidy(lm(avg_attendance ~ R_g + HR_g + W + yearID, data = .)))
+q4
+```
+
+#### Q5
+Suppose a team averaged 5 runs per game, 1.2 home runs per game, and won 80 games in a season.
+What would the team's avg attendance be in 1960?
+```{r}
+q5 <- lm(avg_attendance ~ R_g + HR_g + W + yearID,
+         data = Teams_small)
+
+q5_test <- data.frame(R_g = 5, HR_g = 1.2, W = 80, yearID = 2002)
+
+predict(q5, q5_test)
+```
+#### Q6
+Use the model from q4 to predict average attendance for teams in 2002 in the original Teams dataframe.
+What is the correlation between the predicted attendance and actual?
+```{r}
+model <- lm(avg_attendance ~ R_g + HR_g + W + yearID, 
+            data = Teams_small)
+
+Teams2002 <- Teams %>%
+  filter(yearID == 2002) %>%
+  mutate(R_g = R / G,
+         HR_g = HR / G)
+
+Teams2002 <- Teams2002 %>%
+  mutate(pred_attend = predict(model, Teams2002))
+```
+```{r}
+cor(Teams2002$attendance, Teams2002$pred_attend)
+```
+
+
+## Assessment #2
+```{r}
+library(dslabs)
+data("research_funding_rates")
+```
+
+```{r}
+head(research_funding_rates)
+```
+
+```{r}
+sum(research_funding_rates$applications_women) - sum(research_funding_rates$awards_women)
+```
+```{r}
+two_by_two <- research_funding_rates %>%
+  select(-discipline) %>%
+  summarize_all(funs(sum)) %>%
+  summarise(yes_men = awards_men,
+            no_men = applications_men - awards_men,
+            yes_women = awards_women,
+            no_women = applications_women - awards_women) %>%
+  gather %>%
+  separate(key, c('awarded','gender')) %>%
+  spread(gender, value)
+
+two_by_two
+```
+
+```{r}
+two_by_two$men[2] / sum(two_by_two$men) *100
+```
+```{r}
+two_by_two$women[2] / sum(two_by_two$women) *100
+```
+
+Run a chi-squared test on the two-by-two to determine whether the difference in the two success rates is significant.
+```{r}
+two_by_two %>%
+  select(-awarded) %>%
+  chisq.test() %>%
+  tidy()
+```
+
+```{r}
+dat <- research_funding_rates %>%
+  mutate(discipline = reorder(discipline, success_rates_total)) %>%
+  rename(success_total = success_rates_total,
+         success_men = success_rates_men,
+         success_women = success_rates_women) %>%
+  gather(key, value, -discipline) %>%
+  separate(key, c('type','gender')) %>%
+  spread(type, value) %>%
+  filter(gender != 'total')
+
+dat
+```
+
+To check if this is a case of Simpson's paradox, plot the success rate vs disciplines, which have been ordered by overall success, with colors to denote the genders and size to denote the number of applications.
+In which fields do men have a higher success rate than women?
+```{r}
+library(RColorBrewer)
+```
+
+```{r}
+
+dat %>% ggplot(aes(discipline, success, color = gender, size = applications)) + 
+  geom_point() + 
+  theme(axis.text.x = element_text(angle = 75,
+                                    hjust = 1)) + 
+  scale_color_manual(values = c("women" = 'seagreen',
+                                "men" = 'orange'))
+```
+
